@@ -3,13 +3,19 @@ from telebot import types
 from logging import getLogger
 from datetime import datetime
 from pytz import timezone
-from time import time
+from time import time , sleep
+import json
+import os
+from logging import getLogger
 
 # Replace this with your actual bot token
-TOKEN = "YOUR_BOT_TOKEN_HERE"
+TOKEN = "YOUR_BOT_TOKEN"
 bot = telebot.TeleBot(TOKEN)
 logger = getLogger(__name__)
 message_tracker = {}
+user_data = {}
+ADMIN_USER_IDS = [12345678] 
+USERS_FILE = "users.json"
 
 commands = [
     telebot.types.BotCommand("start", "شروع ربات"),
@@ -18,6 +24,26 @@ commands = [
 bot.set_my_commands(commands)
 
 bot_start_time = datetime.now(timezone('Asia/Tehran')).timestamp()
+
+def save_user(user_id, username):
+    if user_id in ADMIN_USER_IDS:
+        return
+    users = []
+    if os.path.exists(USERS_FILE):
+        try:
+            with open(USERS_FILE, 'r', encoding='utf-8') as f:
+                users = json.load(f)
+        except json.JSONDecodeError:
+            logger.error("Failed to read users.json, starting with empty list")
+    
+    if not any(user['id'] == user_id for user in users):
+        users.append({"id": user_id, "username": username if username else "ندارد"})
+        try:
+            with open(USERS_FILE, 'w', encoding='utf-8') as f:
+                json.dump(users, f, ensure_ascii=False, indent=4)
+            logger.info(f"Saved user {user_id} to users.json")
+        except Exception as e:
+            logger.error(f"Error saving user {user_id} to users.json: {e}")
 
 def is_message_valid(message):
     message_time = message.date
@@ -49,6 +75,32 @@ def check_rate_limit(user_id):
     
     return True, ""
 
+def send_broadcast(message):
+    if not is_message_valid(message):
+        return
+    user_id = message.chat.id
+    if user_id not in ADMIN_USER_IDS:
+        return
+    users = []
+    if os.path.exists(USERS_FILE):
+        try:
+            with open(USERS_FILE, 'r', encoding='utf-8') as f:
+                users = json.load(f)
+        except json.JSONDecodeError:
+            logger.error("Failed to read users.json")
+            bot.send_message(user_id, "❌ خطا در خواندن لیست کاربران!")
+            return
+    success_count = 0
+    for user in users:
+        try:
+            bot.send_message(user["id"], message.text)
+            success_count += 1
+            sleep(0.5)
+        except Exception as e:
+            logger.warning(f"Failed to send broadcast to user {user['id']}: {e}")
+            continue
+    bot.send_message(user_id, f"پیام به {success_count} کاربر ارسال شد 📢")
+    logger.info(f"Broadcast sent to {success_count} users by admin {user_id}")
 
 @bot.message_handler(commands=['start'])
 def start_command(message):
@@ -56,12 +108,12 @@ def start_command(message):
         return
     
     user_id = message.from_user.id
+    user_name = message.from_user.first_name
     allowed, error_message = check_rate_limit(user_id)
     if not allowed:
         bot.send_message(user_id, error_message)
         return
-    
-    user_name = message.from_user.first_name
+    save_user(user_id, user_name)
     
     welcome_message = f'''
 سلام {user_name} به ربات ما خوش اومدی !
@@ -84,8 +136,13 @@ Dunno what is DigitID? press /help
 💬 Ready? Forward a message or send a username to see the magic!
 └── @RezDigitIDBot
 '''
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
 
-    bot.send_message(message.chat.id, welcome_message, parse_mode="Markdown")
+    if user_id in ADMIN_USER_IDS:
+        btn_special = types.KeyboardButton("پیام همگانی 📢")
+        markup.add(btn_special)
+    
+    bot.send_message(message.chat.id, welcome_message, parse_mode="Markdown" , reply_markup=markup)
 
 
 @bot.message_handler(commands=['alive'])
@@ -215,6 +272,18 @@ def forwarded_message_handler(message):
 └ @RezDigitIDBot
 '''
     bot.send_message(message.chat.id, response, parse_mode="Markdown")
+
+@bot.message_handler(func=lambda message: message.text == "پیام همگانی 📢")
+def handle_broadcast(message):
+    if not is_message_valid(message):
+        return
+    user_id = message.chat.id
+    if user_id not in ADMIN_USER_IDS:
+        bot.send_message(user_id, "این قابلیت فقط برای ادمین‌ها در دسترسه!")
+        return
+    logger.info(f"Broadcast initiated by admin {user_id}")
+    bot.send_message(user_id, "هر پیامی که می‌خوای بنویس تا برای همه کاربران ارسال بشه 📢")
+    bot.register_next_step_handler(message, send_broadcast)
 
 def main():
     print("Bot is starting...")

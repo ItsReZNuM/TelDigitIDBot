@@ -1,20 +1,22 @@
 import telebot
 from telebot import types
-from logging import getLogger
 from datetime import datetime
 from pytz import timezone
 from time import time , sleep
 import json
 import os
 from logging import getLogger
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Replace this with your actual bot token
-TOKEN = "YOUR_BOT_TOKEN"
+TOKEN = os.getenv("TOKEN")
+ADMIN_USER_IDS = os.getenv("ADMIN_USER_IDS")
 bot = telebot.TeleBot(TOKEN)
 logger = getLogger(__name__)
 message_tracker = {}
 user_data = {}
-ADMIN_USER_IDS = [12345678] 
 USERS_FILE = "users.json"
 
 commands = [

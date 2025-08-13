@@ -12,16 +12,17 @@ from .messages import get_start_message, get_help_message
 logger = logging.getLogger(__name__)
 
 def register(bot: TeleBot):
-    """Register all command handlers on the provided TeleBot instance."""
-
+    """
+    Register all command handlers on the provided TeleBot instance.
+    """
     @bot.message_handler(commands=['start'])
     def start_command(message):
         """
-        /start handler:
-        - checks if message is valid (not sent before bot started)
-        - checks rate-limit
-        - stores user in sqlite (via database.add_user)
-        - shows welcome keyboard (admin gets broadcast button)
+        Handle /start command:
+        - Checks if message is valid (not sent before bot started)
+        - Checks rate-limit
+        - Stores user in SQLite (via database.add_user)
+        - Shows welcome keyboard (admin gets broadcast button)
         """
         if not is_message_valid(message):
             return
@@ -35,7 +36,7 @@ def register(bot: TeleBot):
         # Save user to SQLite
         add_user(user_id, message.from_user.first_name)
 
-        # دریافت پیام خوش‌آمدگویی
+        # Get welcome message
         welcome_message = get_start_message(message.from_user.first_name, user_id)
 
         markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
@@ -47,9 +48,9 @@ def register(bot: TeleBot):
     @bot.message_handler(commands=['help'])
     def help_command(message):
         """
-        /help handler:
-        - checks if message is valid (not sent before bot started)
-        - checks rate-limit
+        Handle /help command:
+        - Checks if message is valid (not sent before bot started)
+        - Checks rate-limit
         """
         if not is_message_valid(message):
             return
@@ -60,16 +61,16 @@ def register(bot: TeleBot):
             bot.send_message(user_id, err)
             return
 
-        # دریافت پیام کمک
+        # Get help message
         welcome_message = get_help_message(user_id)
-        bot.send_message(message.chat.id, welcome_message, parse_mode="MarkdownV2")
+        bot.send_message(message.chat.id, welcome_message, parse_mode="Markdown")
 
     @bot.message_handler(commands=['alive'])
     def alive_command(message):
         """
-        /alive handler — simple liveness check.
-        - checks if message is valid (not sent before bot started)
-        - checks rate-limit
+        Handle /alive command — simple liveness check.
+        - Checks if message is valid (not sent before bot started)
+        - Checks rate-limit
         """
         if not is_message_valid(message):
             return

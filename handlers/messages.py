@@ -11,27 +11,14 @@ from .rate_limit import check_rate_limit, is_message_valid
 
 logger = logging.getLogger(__name__)
 
-def escape_markdown_v2(text: str) -> str:
-    """
-    فرار کردن کاراکترهای ویژه برای MarkdownV2 تلگرام.
-    Args:
-        text: متن ورودی
-    Returns:
-        متن با کاراکترهای ویژه فرار شده
-    """
-    special_chars = r'_*[]()~`>#+-=|{}.!'
-    for char in special_chars:
-        text = text.replace(char, f'\\{char}')
-    return text
-
 def get_start_message(first_name: str, user_id: int) -> str:
     """
-    تولید پیام خوش‌آمدگویی برای دستور /start.
+    Generate welcome message for /start command.
     Args:
-        first_name: نام کاربر
-        user_id: آیدی عددی کاربر
+        first_name: User's first name
+        user_id: User's numeric Telegram ID
     Returns:
-        متن پیام خوش‌آمدگویی
+        Welcome message text
     """
     message = f'''
 سلام {first_name} به ربات ما خوش اومدی !
@@ -58,11 +45,11 @@ Dunno what is DigitID? press /help
 
 def get_help_message(user_id: int) -> str:
     """
-    تولید پیام کمک برای دستور /help.
+    Generate help message for /help command.
     Args:
-        user_id: آیدی عددی کاربر
+        user_id: User's numeric Telegram ID
     Returns:
-        متن پیام کمک
+        Help message text
     """
     message = f'''
 خب با این شروع کنیم که اصلا آیدی عددیه چیه و چه کاربردی داره 🤔
@@ -89,44 +76,43 @@ tg://openmessage?user_id={user_id}
 Sure, here's the text about Telegram numerical IDs with emojis for better engagement:
 
 What's a Telegram Numerical ID and How Does It Work? 🤔
-When you set up your Telegram account and jump in, something special happens: a unique numerical ID is immediately assigned to your account! 🆔 Unlike your username 🏷️ or display name ✍️, you can't change, delete, or tweak this number at all\. Nope! It's permanently linked to your account forever and ever (unless you decide to delete your account, of course! 👋)\.
+When you set up your Telegram account and jump in, something special happens: a unique numerical ID is immediately assigned to your account! 🆔 Unlike your username 🏷️ or display name ✍️, you can't change, delete, or tweak this number at all. Nope! It's permanently linked to your account forever and ever (unless you decide to delete your account, of course! 👋).
 
-Numerical ID vs\. Username: What's the Difference? 🧐
-As a Telegram user, you can pick a username and a display name, or you can skip them\. If you don't set a username, finding you can be super tough for someone who doesn't have your phone number 📞\. You could even use a fake display name! But a numerical ID is a whole different story:
+Numerical ID vs. Username: What's the Difference? 🧐
+As a Telegram user, you can pick a username and a display name, or you can skip them. If you don't set a username, finding you can be super tough for someone who doesn't have your phone number 📞. You could even use a fake display name! But a numerical ID is a whole different story:
 
-Permanent & Unchangeable: Your numerical ID is a fixed number given to you the moment your account is created, and you can't alter it\. 🔒
+Permanent & Unchangeable: Your numerical ID is a fixed number given to you the moment your account is created, and you can't alter it. 🔒
 
-Unique Identifier: It's like your account's personal fingerprint 👆—a unique number that belongs only to you\.
+Unique Identifier: It's like your account's personal fingerprint 👆—a unique number that belongs only to you.
 
 How Do You Find This Number? 🕵️‍♀️
-The official Telegram app doesn't have a direct way for you to see your numerical ID\. 🤷‍♀️ But don't worry! You can usually grab it using unofficial Telegram clients or through specialized bots designed for this purpose\. 🤖
+The official Telegram app doesn't have a direct way for you to see your numerical ID. 🤷‍♀️ But don't worry! You can usually grab it using unofficial Telegram clients or through specialized bots designed for this purpose. 🤖
 
 How Can You Use This Number to Chat with Someone? 💬
-Again, the official Telegram app doesn't have a built-in feature to open a chat using just a numerical ID\. However, there's a clever workaround you can use! 😉
+Again, the official Telegram app doesn't have a built-in feature to open a chat using just a numerical ID. However, there's a clever workaround you can use! 😉
 
 You can use a special link format like this:
 tg://openmessage?user_id=XXXXXXXX
 
-Just replace those "X"s with the person's numerical ID\. For example, to open a chat with yourself, you'd click on a link similar to this:
+Just replace those "X"s with the person's numerical ID. For example, to open a chat with yourself, you'd click on a link similar to this:
 tg://openmessage?user_id={user_id}
 BTW sometimes this link won't redirect you to the PV you wanted ( Dunno The reason , just go find the answer XD)
 
-No need to fret, no one else will see your specific link! 🤫 When you click on a link like this, it'll probably open your "Saved Messages" chat, since it's basically directing you right back to your own conversation\. ↩️
+No need to fret, no one else will see your specific link! 🤫 When you click on a link like this, it'll probably open your "Saved Messages" chat, since it's basically directing you right back to your own conversation. ↩️
 
-So, in a nutshell, your numerical ID is a unique, unchangeable number tied to your Telegram account\. While the official app doesn't show it or let you use it directly, you can find it with third-party tools and use specific link formats to jump straight into a chat! ✨
+So, in a nutshell, your numerical ID is a unique, unchangeable number tied to your Telegram account. While the official app doesn't show it or let you use it directly, you can find it with third-party tools and use specific link formats to jump straight into a chat! ✨
 '''
-    return escape_markdown_v2(message)
+    return message
 
 def register(bot: TeleBot):
     """
-    Register handlers related to messages (forwarded, broadcast UI flow).
+    Register handlers for non-command messages (forwarded messages, broadcast flow).
     """
-
     @bot.message_handler(content_types=['text'], func=lambda m: m.text == "پیام همگانی 📢")
     def ask_broadcast(message):
         """
         Start the broadcast flow: only admins can send a broadcast.
-        - checks if message is valid (not sent before bot started)
+        - Checks if message is valid (not sent before bot started)
         """
         if not is_message_valid(message):
             return
@@ -142,7 +128,7 @@ def register(bot: TeleBot):
         """
         Read next message from admin, then broadcast to all users from DB.
         Rate-limiting check on the admin is applied.
-        - checks if message is valid (not sent before bot started)
+        - Checks if message is valid (not sent before bot started)
         """
         if not is_message_valid(message):
             return
@@ -160,7 +146,7 @@ def register(bot: TeleBot):
             try:
                 bot.send_message(u["id"], text)
                 success += 1
-                sleep(0.5)  # polite pacing
+                sleep(0.5)  # Polite pacing
             except Exception as e:
                 logger.warning("Broadcast failed to %s: %s", u["id"], e)
                 continue
@@ -170,9 +156,9 @@ def register(bot: TeleBot):
     @bot.message_handler(content_types=['text'], func=lambda m: m.forward_from is not None or m.forward_from_chat is not None)
     def forwarded_message_handler(message):
         """
-        Handles forwarded messages (from user or channel) and prints IDs/title.
-        - checks if message is valid (not sent before bot started)
-        - checks rate-limit
+        Handle forwarded messages (from user or channel) and print IDs/title.
+        - Checks if message is valid (not sent before bot started)
+        - Checks rate-limit
         """
         if not is_message_valid(message):
             return
@@ -213,5 +199,5 @@ def register(bot: TeleBot):
             bot.send_message(message.chat.id, response, parse_mode="Markdown")
             return
 
-        # fallback (shouldn't happen because of func filter)
+        # Fallback (shouldn't happen due to func filter)
         bot.send_message(message.chat.id, "این پیام فورواردی قابل پردازش نیست.")

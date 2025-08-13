@@ -7,7 +7,7 @@ import logging
 import config
 from database import get_all_users
 from time import sleep
-from .commands import check_rate_limit
+from .rate_limit import check_rate_limit, is_message_valid
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,13 @@ def register(bot: TeleBot):
 
     @bot.message_handler(content_types=['text'], func=lambda m: m.text == "پیام همگانی 📢")
     def ask_broadcast(message):
-        """Start the broadcast flow: only admins can send a broadcast."""
+        """
+        Start the broadcast flow: only admins can send a broadcast.
+        - checks if message is valid (not sent before bot started)
+        """
+        if not is_message_valid(message):
+            return
+
         user_id = message.chat.id
         if user_id not in config.ADMIN_USER_IDS:
             bot.send_message(user_id, "این قابلیت فقط برای ادمین‌ها در دسترسه!")
@@ -30,7 +36,11 @@ def register(bot: TeleBot):
         """
         Read next message from admin, then broadcast to all users from DB.
         Rate-limiting check on the admin is applied.
+        - checks if message is valid (not sent before bot started)
         """
+        if not is_message_valid(message):
+            return
+
         admin_id = message.chat.id
         allowed, err = check_rate_limit(admin_id)
         if not allowed:
@@ -55,7 +65,12 @@ def register(bot: TeleBot):
     def forwarded_message_handler(message):
         """
         Handles forwarded messages (from user or channel) and prints IDs/title.
+        - checks if message is valid (not sent before bot started)
+        - checks rate-limit
         """
+        if not is_message_valid(message):
+            return
+
         user_id = message.from_user.id
         allowed, err = check_rate_limit(user_id)
         if not allowed:

@@ -6,10 +6,9 @@ import config
 
 logger = logging.getLogger(__name__)
 
-# ذخیره زمان شروع ربات
+# Bot Start Time
 bot_start_time = datetime.now(timezone('Asia/Tehran')).timestamp()
 
-# دیکشنری برای پیگیری پیام‌های کاربران
 message_tracker = {}
 
 def is_message_valid(message) -> bool:
@@ -38,7 +37,7 @@ def check_rate_limit(user_id: int) -> tuple[bool, str]:
     """
     current_time = time()
 
-    # نادیده گرفتن محدودیت برای ادمین‌ها
+    # Ignore Limit For Admins
     if user_id in config.ADMIN_USER_IDS:
         return True, ""
 

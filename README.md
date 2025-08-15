@@ -10,7 +10,7 @@ This bot also allows you to extract the numeric ID of **any forwarded message** 
 - 🆔 Displays the user's **numeric Telegram ID**.
 - 📤 Detects and reveals the numeric ID of forwarded users or channels.
 - 🧠 Educates users about what numeric IDs are and how they work.
-- 🧼 Clean and simple interface – no database, no hassle.
+- 🧼 Clean and simple interface.
 
 ---
 
@@ -80,8 +80,8 @@ This opens a private chat directly (if permissions allow it).
 
 ## 🔐 Privacy & Security
 
-- No database or storage
 - No logging of user data
+- Using SQLite For storing user number IDs for sending Bulk message
 - Forwarded messages are only used temporarily to extract metadata
 
 ---

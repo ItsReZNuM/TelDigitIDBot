@@ -29,16 +29,25 @@ pip install -r requirements.txt
 ## 📁 File Structure
 
 ```
-├── digit.py             # Main bot file
-├── requirements.txt     # Python dependencies
-└── README.md            # You're here!
+├── .env.example   # Put Your Token And ADMIN_USER_IDS here (remove .example)
+├── .gitignore   # Just a GitIgnore!
+├── README.md   # You Are Here!
+├── config.py   # Configuration File For Bot
+├── database.py   # Make Database And Queries Here
+├── main.py   # Main File of Project
+├── migrate_users.py   # A python file that exports every user from JSON to SQLite
+├── handlers/
+│   ├── __init__.py   # Initialize the handlers package
+│   ├── messages.py   # Define message templates for bot responses
+│   ├── commands.py   # Handle bot commands like /start, /help, and /alive
+│   └── rate_limit.py   # Implement rate-limiting for user messages
 ```
 
 ---
 
 ## ⚙️ Usage
 
-1. Replace the bot token in `digit.py`:
+1. Replace the bot token in `.env`:
 
 ```python
 TOKEN = "YOUR_BOT_TOKEN_HERE"
@@ -47,7 +56,7 @@ TOKEN = "YOUR_BOT_TOKEN_HERE"
 2. Run the bot:
 
 ```bash
-python digit.py
+python main.py
 ```
 
 3. Start the bot in Telegram by typing `/start`.  
@@ -96,3 +105,6 @@ Made with ❤️ by [@ItsReZNuM](https://t.me/RezDigitIDBot)
 
 - 🔗 Try the bot: [@RezDigitIDBot](https://t.me/RezDigitIDBot)
 - ✉️ Contact the author: [@ItsRezNum](https://t.me/ItsRezNum)
+
+---
+

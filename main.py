@@ -10,7 +10,7 @@ from telebot import TeleBot
 
 def setup_logging():
     logging.basicConfig(
-        level=logging.INFO,
+        level=logging.ERROR,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
     )
 

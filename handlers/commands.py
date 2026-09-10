@@ -7,7 +7,7 @@ import logging
 import config
 from database import add_user, count_users
 from .rate_limit import check_rate_limit, is_message_valid
-from .messages import (safe_send, main_keyboard, HELP_TEXT, ABOUT_TEXT,
+from .messages import (safe_send, main_keyboard, copy_id_keyboard, HELP_TEXT, ABOUT_TEXT,
                        BTN_BROADCAST, BTN_CANCEL, WATERMARK)
 
 logger = logging.getLogger(__name__)
@@ -77,11 +77,14 @@ def register(bot: TeleBot):
             tname = target.first_name or "بدون نام"
             text = (f"🆔 آیدی عددی <b>{tname}</b>: <code>{target.id}</code>\n\n"
                     f"🔗 <code>tg://openmessage?user_id={target.id}</code>\n\n{WATERMARK}")
+            safe_send(bot, message.chat.id, text, parse_mode="HTML",
+                      reply_markup=copy_id_keyboard(target.id))
         else:
             name = message.from_user.first_name or "دوست من"
             text = (f"🆔 آیدی عددی <b>{name}</b>: <code>{user_id}</code>\n\n"
                     f"🔗 <code>tg://openmessage?user_id={user_id}</code>\n\n{WATERMARK}")
-        safe_send(bot, message.chat.id, text, parse_mode="HTML")
+            safe_send(bot, message.chat.id, text, parse_mode="HTML",
+                      reply_markup=copy_id_keyboard(user_id))
 
     @bot.message_handler(commands=['about'])
     def about_command(message):

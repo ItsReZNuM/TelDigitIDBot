@@ -19,6 +19,10 @@ BTN_ID = "آیدی خودم 🆔"
 BTN_ABOUT = "درباره ربات ℹ️"
 BTN_BROADCAST = "پیام همگانی 📢"
 BTN_CANCEL = "لغو ❌"
+BTN_COPY_ID = "کپی آیدی 📋"
+
+# Button styles (Telegram Bot API): 'success' = green, 'danger' = red, 'primary' = blue
+STYLE_SUCCESS = "success"
 
 HELP_TEXT = """<b>📖 راهنمای ربات آیدی‌یاب</b>
 
@@ -60,11 +64,22 @@ def safe_send(bot: TeleBot, chat_id, text: str, **kwargs):
 def main_keyboard(user_id: int) -> types.InlineKeyboardMarkup:
     kb = types.InlineKeyboardMarkup(row_width=2)
     kb.add(
-        types.InlineKeyboardButton(BTN_ID, callback_data="myid"),
-        types.InlineKeyboardButton(BTN_HELP, callback_data="help"),
+        types.InlineKeyboardButton(BTN_ID, callback_data="myid", style=STYLE_SUCCESS),
+        types.InlineKeyboardButton(BTN_HELP, callback_data="help", style=STYLE_SUCCESS),
+        types.InlineKeyboardButton(BTN_ABOUT, callback_data="about", style=STYLE_SUCCESS),
     )
     if user_id in config.ADMIN_USER_IDS:
-        kb.add(types.InlineKeyboardButton(BTN_BROADCAST, callback_data="broadcast"))
+        kb.add(types.InlineKeyboardButton(BTN_BROADCAST, callback_data="broadcast", style=STYLE_SUCCESS))
+    return kb
+
+def copy_id_keyboard(numeric_id) -> types.InlineKeyboardMarkup:
+    """Glass-style keyboard with a green auto-copy button for the given numeric ID."""
+    kb = types.InlineKeyboardMarkup(row_width=1)
+    kb.add(types.InlineKeyboardButton(
+        BTN_COPY_ID,
+        copy_text=types.CopyTextButton(text=str(numeric_id)),
+        style=STYLE_SUCCESS,
+    ))
     return kb
 
 def format_user_info(user) -> str:
@@ -160,7 +175,8 @@ def register(bot: TeleBot):
                 safe_send(bot, call.message.chat.id,
                           f"🆔 <b>آیدی عددی {name}:</b> <code>{user_id}</code>\n\n"
                           f"🔗 <code>tg://openmessage?user_id={user_id}</code>\n\n{WATERMARK}",
-                          parse_mode="HTML")
+                          parse_mode="HTML",
+                          reply_markup=copy_id_keyboard(user_id))
 
             elif data == "help":
                 bot.answer_callback_query(call.id)
@@ -285,13 +301,15 @@ def register(bot: TeleBot):
         # 1) classic open forward from a user
         fwd_user = getattr(message, 'forward_from', None)
         if fwd_user is not None:
-            safe_send(bot, chat_id, format_user_info(fwd_user), parse_mode="HTML")
+            safe_send(bot, chat_id, format_user_info(fwd_user), parse_mode="HTML",
+                      reply_markup=copy_id_keyboard(fwd_user.id))
             return
 
         # 2) forward from a channel/group (auto-forward included)
         fwd_chat = getattr(message, 'forward_from_chat', None)
         if fwd_chat is not None:
-            safe_send(bot, chat_id, format_chat_info(fwd_chat), parse_mode="HTML")
+            safe_send(bot, chat_id, format_chat_info(fwd_chat), parse_mode="HTML",
+                      reply_markup=copy_id_keyboard(fwd_chat.id))
             return
 
         # 3) new-style forward origin (Bot API 7+): hidden users end here
@@ -299,11 +317,13 @@ def register(bot: TeleBot):
         if origin is not None:
             otype = getattr(origin, 'type', None)
             if otype == 'user':
-                safe_send(bot, chat_id, format_user_info(origin.sender_user), parse_mode="HTML")
+                safe_send(bot, chat_id, format_user_info(origin.sender_user), parse_mode="HTML",
+                          reply_markup=copy_id_keyboard(origin.sender_user.id))
             elif otype == 'hidden_user':
                 safe_send(bot, chat_id, hidden_forward_text(message), parse_mode="HTML")
             elif otype == 'chat':
-                safe_send(bot, chat_id, format_chat_info(origin.sender_chat), parse_mode="HTML")
+                safe_send(bot, chat_id, format_chat_info(origin.sender_chat), parse_mode="HTML",
+                          reply_markup=copy_id_keyboard(origin.sender_chat.id))
             else:
                 safe_send(bot, chat_id, hidden_forward_text(message), parse_mode="HTML")
             return
@@ -312,7 +332,8 @@ def register(bot: TeleBot):
         if getattr(message, 'is_automatic_forward', False):
             sender_chat = getattr(message, 'sender_chat', None)
             if sender_chat is not None:
-                safe_send(bot, chat_id, format_chat_info(sender_chat), parse_mode="HTML")
+                safe_send(bot, chat_id, format_chat_info(sender_chat), parse_mode="HTML",
+                          reply_markup=copy_id_keyboard(sender_chat.id))
                 return
 
         safe_send(bot, chat_id, "این پیام فورواردی قابل پردازش نیست 🤔")

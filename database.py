@@ -69,3 +69,10 @@ def user_exists(user_id: int) -> bool:
         cur = conn.cursor()
         cur.execute("SELECT 1 FROM users WHERE id = ? LIMIT 1", (user_id,))
         return cur.fetchone() is not None
+
+def count_users() -> int:
+    """Return the total number of registered users."""
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM users")
+        return cur.fetchone()[0]

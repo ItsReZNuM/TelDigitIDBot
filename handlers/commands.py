@@ -8,8 +8,9 @@ import config
 from database import add_user, count_users
 from .rate_limit import check_rate_limit, is_message_valid
 from .force_join import check as force_join_check
-from .messages import (safe_send, main_keyboard, copy_id_keyboard, HELP_TEXT, ABOUT_TEXT,
+from .messages import (safe_send, esc, main_keyboard, copy_id_keyboard, HELP_TEXT, ABOUT_TEXT,
                        BTN_BROADCAST, BTN_CANCEL, WATERMARK)
+from .admin import admin_reply_keyboard, is_admin
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,8 @@ def register(bot: TeleBot):
 
         add_user(user_id, message.from_user.first_name)
 
-        name = message.from_user.first_name or "دوست من"
+        admin = is_admin(user_id)
+        name = esc(message.from_user.first_name) or "دوست من"
         text = (
             f"👋 سلام <b>{name}</b>! به <b>آیدی‌یاب تلگرام</b> خوش اومدی 💎\n\n"
             f"🆔 آیدی عددی خودت: <code>{user_id}</code>\n"
@@ -45,11 +47,23 @@ def register(bot: TeleBot):
             f"🎯 <b>چیکار می‌تونم بکنم؟</b>\n"
             f"▪️ هر پیامی رو فوروارد کن، آیدی فرستنده‌ش رو بهت میدم\n"
             f"▪️ آیدی کانال‌ها رو از پیام فورواردی درمیارم\n"
-            f"▪️ فوروارد بسته رو هم می‌فهمم و راهنماییت می‌کنم\n\n"
-            f"👇 از دکمه‌های شیشه‌ای پایین استفاده کن:\n\n{WATERMARK}"
+            f"▪️ فوروارد بسته رو هم می‌فهمم و راهنماییت می‌کنم\n"
         )
+        if admin:
+            text += (
+                "\n⭐ <b>شما ادمین این ربات هستید!</b>\n"
+                "🛠 پنل مدیریت با کیبورد پایین در دسترسه (/panel)\n"
+            )
+        text += f"\n👇 از دکمه‌های شیشه‌ای پایین استفاده کن:\n\n{WATERMARK}"
         safe_send(bot, message.chat.id, text, parse_mode="HTML",
                   reply_markup=main_keyboard(user_id))
+
+        # admins additionally get the persistent reply-keyboard admin panel
+        if admin:
+            safe_send(bot, message.chat.id,
+                      "🛠 <b>پنل ادمین</b>\nاز کیبورد پایین برای مدیریت ربات استفاده کن:",
+                      parse_mode="HTML",
+                      reply_markup=admin_reply_keyboard())
 
     @bot.message_handler(commands=['help'])
     def help_command(message):

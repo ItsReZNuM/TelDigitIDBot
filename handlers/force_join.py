@@ -13,14 +13,16 @@ from database import get_force_channels
 
 logger = logging.getLogger(__name__)
 
-# cache of "user is a member of chat X" results to avoid hammering the API;
-# a failed membership check is never cached (so joining is detected immediately).
-_MEMBER_CACHE: dict = {}
-_CACHE_TTL = 0  # disabled by default: always re-check to catch instant leaves
-
 
 def is_admin(user_id: int) -> bool:
-    return user_id in config.ADMIN_USER_IDS
+    """True for .env admins and admins added via the admin panel (lazy import avoids cycles)."""
+    if user_id in config.ADMIN_USER_IDS:
+        return True
+    try:
+        from .admin import extra_admins
+        return user_id in extra_admins
+    except Exception:
+        return False
 
 
 def user_is_member(bot: TeleBot, user_id: int, chat_id: int) -> bool:

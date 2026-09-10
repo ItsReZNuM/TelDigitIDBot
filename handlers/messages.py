@@ -54,13 +54,20 @@ ABOUT_TEXT = """<b>💎 RezDigitIDBot | آیدی‌یاب تلگرام</b>
 
 # ----------------------- helpers -----------------------
 
+def esc(text) -> str:
+    """Escape HTML special characters in user-provided text."""
+    if text is None:
+        return ""
+    return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
 def safe_send(bot: TeleBot, chat_id, text: str, **kwargs):
-    """Send a message; on Markdown/HTML parse errors retry as plain text."""
+    """Send a message; on HTML parse errors retry with fully-escaped text (keeps buttons)."""
     try:
         return bot.send_message(chat_id, text, **kwargs)
     except apihelper.ApiTelegramException as e:
         if "can't parse entities" in str(e).lower():
-            return bot.send_message(chat_id, text.replace("<", "&lt;").replace(">", "&gt;"))
+            return bot.send_message(chat_id, esc(text), **kwargs)
         raise
 
 def main_keyboard(user_id: int) -> types.InlineKeyboardMarkup:
@@ -85,9 +92,9 @@ def copy_id_keyboard(numeric_id) -> types.InlineKeyboardMarkup:
     return kb
 
 def format_user_info(user) -> str:
-    name = (user.first_name or "") + (( " " + user.last_name) if user.last_name else "")
-    name = name.strip() or "بدون نام"
-    username = f"@{user.username}" if user.username else "ندارد"
+    name = (user.first_name or "") + ((" " + user.last_name) if user.last_name else "")
+    name = esc(name.strip()) or "بدون نام"
+    username = f"@{esc(user.username)}" if user.username else "ندارد"
     lines = [
         "🕵 <b>اطلاعات کاربر فوروارد‌شده</b>",
         "",
@@ -101,9 +108,9 @@ def format_user_info(user) -> str:
     return "\n".join(lines)
 
 def format_chat_info(chat) -> str:
-    title = getattr(chat, "title", None) or "بدون عنوان"
+    title = esc(getattr(chat, "title", None)) or "بدون عنوان"
     username = getattr(chat, "username", None)
-    username = f"@{username}" if username else "ندارد"
+    username = f"@{esc(username)}" if username else "ندارد"
     kind = "کانال" if getattr(chat, "type", "") == "channel" else "گروه"
     chat_link = f"https://t.me/{username[1:]}" if username != "ندارد" else "ندارد"
     lines = [
@@ -127,14 +134,14 @@ def hidden_forward_text(message) -> str:
         if username:
             parts += [
                 "این پیام به‌جای کاربر، از یک کانال/گروه ارسال شده:",
-                f"📜 عنوان: <b>{getattr(sender_chat, 'title', 'بدون عنوان')}</b>",
-                f"🏷 یوزرنیم: <b>@{username}</b>",
+                f"📜 عنوان: <b>{esc(getattr(sender_chat, 'title', None)) or 'بدون عنوان'}</b>",
+                f"🏷 یوزرنیم: <b>@{esc(username)}</b>",
                 f"🆔 آیدی عددی: <code>{sender_chat.id}</code>",
             ]
         else:
             parts += [
                 "این پیام به‌جای کاربر، از این کانال/گروه ارسال شده:",
-                f"📜 عنوان: <b>{getattr(sender_chat, 'title', 'بدون عنوان')}</b>",
+                f"📜 عنوان: <b>{esc(getattr(sender_chat, 'title', None)) or 'بدون عنوان'}</b>",
                 f"🆔 آیدی عددی: <code>{sender_chat.id}</code>",
                 "",
                 "ℹ️ این کانال یوزرنیم عمومی نداره؛ برای دیدن آیدی کاملش، یه پیام <b>باز</b> ازش فوروارد کن.",

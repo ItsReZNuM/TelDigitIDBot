@@ -13,6 +13,7 @@ load_dotenv()
 TOKEN: str = os.getenv("TOKEN", "").strip()
 ADMIN_USER_IDS_RAW: str = os.getenv("ADMIN_USER_IDS", "").strip()
 DB_PATH: str = os.getenv("DB_PATH", str(Path(__file__).parent / "users.db"))
+ENABLE_FORCE_JOIN: bool = os.getenv("ENABLE_FORCE_JOIN", "true").strip().lower() in ("1", "true", "yes", "on")
 
 def parse_admin_ids(raw: str) -> Set[int]:
     """

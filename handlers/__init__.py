@@ -2,6 +2,8 @@
 from telebot import TeleBot
 from . import commands
 from . import messages
+from . import admin
+
 
 def register_handlers(bot: TeleBot):
     """
@@ -9,3 +11,4 @@ def register_handlers(bot: TeleBot):
     """
     commands.register(bot)
     messages.register(bot)
+    admin.register(bot)

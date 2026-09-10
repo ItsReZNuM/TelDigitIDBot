@@ -8,6 +8,8 @@ import logging
 import config
 from database import get_all_users, add_user
 from .rate_limit import check_rate_limit, is_message_valid
+from .force_join import check as force_join_check
+from .force_join import blocked_text, membership_keyboard, get_missing_channels
 
 logger = logging.getLogger(__name__)
 
@@ -159,15 +161,42 @@ def register(bot: TeleBot):
     @bot.callback_query_handler(func=lambda c: True)
     def on_callback(call):
         try:
-            if not is_message_valid(call.message):
-                pass
             user_id = call.from_user.id
+
+            # force-join re-check on every button press (except the join-check itself
+            # and admin panel buttons which are already admin-gated)
+            if call.data not in ("check_join",) and not call.data.startswith("adm:"):
+                if not force_join_check(bot, call):
+                    return
+
             allowed, err = check_rate_limit(user_id)
             if not allowed:
                 bot.answer_callback_query(call.id, err, show_alert=True)
                 return
 
             data = call.data
+
+            if data == "check_join":
+                # re-check membership after user pressed "بررسی عضویت"
+                missing = get_missing_channels(bot, user_id)
+                if missing:
+                    bot.answer_callback_query(call.id, "هنوز عضو نشدی! 🚫", show_alert=True)
+                    try:
+                        bot.edit_message_text(
+                            blocked_text(missing), chat_id=call.message.chat.id,
+                            message_id=call.message.message_id, parse_mode="HTML",
+                            reply_markup=membership_keyboard(missing))
+                    except apihelper.ApiTelegramException:
+                        pass
+                else:
+                    bot.answer_callback_query(call.id, "عضویتت تایید شد! خوش اومدی ✅")
+                    try:
+                        bot.delete_message(call.message.chat.id, call.message.message_id)
+                    except apihelper.ApiTelegramException:
+                        pass
+                    safe_send(bot, call.message.chat.id,
+                              "✅ عضویتت تایید شد! حالا می‌تونی از ربات استفاده کنی 🎉")
+                return
 
             if data == "myid":
                 name = call.from_user.first_name or "دوست من"
@@ -289,6 +318,8 @@ def register(bot: TeleBot):
     def forwarded_message_handler(message):
         if not is_message_valid(message):
             return
+        if not force_join_check(bot, message):
+            return
 
         chat_id = message.chat.id
         allowed, err = check_rate_limit(message.from_user.id)
@@ -342,6 +373,8 @@ def register(bot: TeleBot):
     @bot.message_handler(content_types=['text'])
     def fallback_text(message):
         if not is_message_valid(message):
+            return
+        if not force_join_check(bot, message):
             return
         chat_id = message.chat.id
         allowed, err = check_rate_limit(message.from_user.id)

@@ -7,6 +7,7 @@ import logging
 import config
 from database import add_user, count_users
 from .rate_limit import check_rate_limit, is_message_valid
+from .force_join import check as force_join_check
 from .messages import (safe_send, main_keyboard, copy_id_keyboard, HELP_TEXT, ABOUT_TEXT,
                        BTN_BROADCAST, BTN_CANCEL, WATERMARK)
 
@@ -24,6 +25,8 @@ def register(bot: TeleBot):
         Handle /start: store user and show the fancy glass-style menu.
         """
         if not is_message_valid(message):
+            return
+        if not force_join_check(bot, message):
             return
 
         user_id = message.from_user.id
@@ -53,6 +56,8 @@ def register(bot: TeleBot):
         """Handle /help: show the guide."""
         if not is_message_valid(message):
             return
+        if not force_join_check(bot, message):
+            return
         user_id = message.from_user.id
         allowed, err = check_rate_limit(user_id)
         if not allowed:
@@ -65,6 +70,8 @@ def register(bot: TeleBot):
     def id_command(message):
         """Handle /id: show sender's (or replied-to user's) numeric ID."""
         if not is_message_valid(message):
+            return
+        if not force_join_check(bot, message):
             return
         user_id = message.from_user.id
         allowed, err = check_rate_limit(user_id)

@@ -6,7 +6,7 @@ from telebot import TeleBot, apihelper
 from telebot import types
 import logging
 import config
-from database import get_all_users, add_user
+from database import add_user
 from .rate_limit import check_rate_limit, is_message_valid
 from .force_join import check as force_join_check
 from .force_join import blocked_text, membership_keyboard, get_missing_channels
@@ -77,8 +77,6 @@ def main_keyboard(user_id: int) -> types.InlineKeyboardMarkup:
         types.InlineKeyboardButton(BTN_HELP, callback_data="help", style=STYLE_SUCCESS),
         types.InlineKeyboardButton(BTN_ABOUT, callback_data="about", style=STYLE_SUCCESS),
     )
-    if user_id in config.ADMIN_USER_IDS:
-        kb.add(types.InlineKeyboardButton(BTN_BROADCAST, callback_data="broadcast", style=STYLE_SUCCESS))
     return kb
 
 def copy_id_keyboard(numeric_id) -> types.InlineKeyboardMarkup:
@@ -160,9 +158,11 @@ def hidden_forward_text(message) -> str:
 
 def register(bot: TeleBot):
     """
-    Register handlers for non-command messages (forwarded messages, broadcast flow)
+    Register handlers for non-command messages (forwarded messages)
     and callback queries for inline buttons.
     """
+    from .admin import make_broadcast_step, is_admin
+    broadcast_step = make_broadcast_step(bot)
 
     # ---------- callback queries (inline buttons) ----------
     @bot.callback_query_handler(func=lambda c: True)
@@ -206,7 +206,7 @@ def register(bot: TeleBot):
                 return
 
             if data == "myid":
-                name = call.from_user.first_name or "دوست من"
+                name = esc(call.from_user.first_name) or "دوست من"
                 bot.answer_callback_query(call.id, "اینم آیدی تو! 🆔")
                 safe_send(bot, call.message.chat.id,
                           f"🆔 <b>آیدی عددی {name}:</b> <code>{user_id}</code>\n\n"
@@ -223,7 +223,7 @@ def register(bot: TeleBot):
                 safe_send(bot, call.message.chat.id, ABOUT_TEXT, parse_mode="HTML")
 
             elif data == "broadcast":
-                if user_id not in config.ADMIN_USER_IDS:
+                if not is_admin(user_id):
                     bot.answer_callback_query(call.id, "این دکمه فقط برای ادمینه! 🚫", show_alert=True)
                     return
                 bot.answer_callback_query(call.id, "حالا پیامت رو بفرست")
@@ -231,15 +231,7 @@ def register(bot: TeleBot):
                           "📢 حالا پیام همگانی رو بفرست (هر نوع پیامی)؛ با دکمه‌ی لغو می‌تونی منصرف شی.",
                           reply_markup=types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
                           .add(types.KeyboardButton(BTN_CANCEL)))
-                bot.register_next_step_handler(call.message, perform_broadcast)
-
-            elif data == "cancel_broadcast":
-                bot.answer_callback_query(call.id, "لغو شد ✅")
-                try:
-                    bot.delete_message(call.message.chat.id, call.message.message_id)
-                except Exception:
-                    pass
-                safe_send(bot, call.message.chat.id, "ارسال همگانی لغو شد ✅", reply_markup=types.ReplyKeyboardRemove())
+                bot.register_next_step_handler(call.message, broadcast_step)
 
         except apihelper.ApiTelegramException as e:
             logger.warning("Callback API error: %s", e)
@@ -253,67 +245,6 @@ def register(bot: TeleBot):
                 bot.answer_callback_query(call.id, "خطایی پیش اومد؛ دوباره امتحان کن 🙏")
             except Exception:
                 pass
-
-    # ---------- broadcast flow (admin) ----------
-    @bot.message_handler(func=lambda m: m.text == BTN_BROADCAST)
-    def ask_broadcast(message):
-        if not is_message_valid(message):
-            return
-        chat_id = message.chat.id
-        if message.from_user.id not in config.ADMIN_USER_IDS:
-            safe_send(bot, chat_id, "این قابلیت فقط برای ادمین‌ها در دسترسه! 🚫")
-            return
-        safe_send(bot, chat_id, "هر پیامی که می‌خوای بنویس تا برای همه کاربران ارسال بشه 📢",
-                  reply_markup=types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-                  .add(types.KeyboardButton(BTN_CANCEL)))
-        bot.register_next_step_handler(message, perform_broadcast)
-
-    def perform_broadcast(message):
-        if not is_message_valid(message):
-            return
-        admin_id = message.chat.id
-        if message.text == BTN_CANCEL:
-            safe_send(bot, admin_id, "ارسال همگانی لغو شد ✅", reply_markup=types.ReplyKeyboardRemove())
-            return
-
-        allowed, err = check_rate_limit(admin_id)
-        if not allowed:
-            safe_send(bot, admin_id, err)
-            return
-
-        users = get_all_users()
-        total, success, blocked, failed = len(users), 0, 0, 0
-        status = safe_send(bot, admin_id, "⏳ در حال ارسال...")
-
-        for u in users:
-            uid = u["id"]
-            try:
-                bot.copy_message(uid, message.chat.id, message.message_id)
-                success += 1
-            except apihelper.ApiTelegramException as e:
-                if "blocked" in str(e).lower() or "user is deactivated" in str(e).lower():
-                    blocked += 1
-                else:
-                    failed += 1
-                logger.warning("Broadcast failed to %s: %s", uid, e)
-            except Exception as e:
-                failed += 1
-                logger.warning("Broadcast failed to %s: %s", uid, e)
-
-        report = (f"✅ ارسال همگانی تمام شد\n\n"
-                  f"👥 کل کاربران: <b>{total}</b>\n"
-                  f"📬 موفق: <b>{success}</b>\n"
-                  f"🚫 بلاک/حذف‌شده: <b>{blocked}</b>\n"
-                  f"⚠️ خطا: <b>{failed}</b>")
-        try:
-            if status:
-                bot.edit_message_text(report, chat_id=status.chat.id, message_id=status.message_id, parse_mode="HTML")
-            else:
-                safe_send(bot, admin_id, report, parse_mode="HTML")
-        except Exception:
-            safe_send(bot, admin_id, report, parse_mode="HTML")
-        logger.info("Broadcast by admin %s: total=%d ok=%d blocked=%d failed=%d",
-                    admin_id, total, success, blocked, failed)
 
     # ---------- forwarded messages ----------
     @bot.message_handler(content_types=['text', 'photo', 'video', 'audio', 'voice', 'document',

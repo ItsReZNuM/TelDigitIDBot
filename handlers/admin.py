@@ -34,7 +34,6 @@ B_STATS = "📊 آمار ربات"
 B_BCAST = "📢 ارسال همگانی"
 B_FJ = "🔒 جوین اجباری"
 B_ADMINS = "👥 مدیریت ادمین‌ها"
-B_CLOSE = "❌ بستن پنل"
 
 # nested panels
 B_FJ_LIST = "📋 لیست کانال‌ها"
@@ -105,7 +104,6 @@ def admin_reply_keyboard() -> types.ReplyKeyboardMarkup:
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
     kb.add(B_STATS, B_BCAST)
     kb.add(B_FJ, B_ADMINS)
-    kb.add(B_CLOSE)
     return kb
 
 
@@ -301,9 +299,77 @@ def resolve_chat(bot: TeleBot, raw: str):
 
     return chat, None
 
+# ---------------- broadcast (full log) ----------------
+
+def make_broadcast_step(bot: TeleBot):
+    """Return a next-step handler that broadcasts the admin's message to all users."""
+
+    def perform_broadcast(message):
+        if not is_message_valid(message):
+            return
+        admin_id = message.chat.id
+        if not is_admin(message.from_user.id):
+            return
+        if message.text == BTN_CANCEL:
+            safe_send(bot, admin_id, "❌ ارسال همگانی لغو شد.",
+                      reply_markup=types.ReplyKeyboardRemove())
+            return
+
+        users = get_all_users()
+        total = len(users)
+        status = safe_send(bot, admin_id, "⏳ در حال ارسال همگانی...")
+
+        success, blocked, failed = [], [], []
+        for u in users:
+            uid = u["id"]
+            try:
+                bot.copy_message(uid, admin_id, message.message_id)
+                success.append(uid)
+            except apihelper.ApiTelegramException as e:
+                if "blocked" in str(e).lower() or "deactivated" in str(e).lower():
+                    blocked.append(uid)
+                else:
+                    failed.append(uid)
+                logger.warning("Broadcast failed to %s: %s", uid, e)
+            except Exception as e:
+                failed.append(uid)
+                logger.warning("Broadcast failed to %s: %s", uid, e)
+
+        def fmt_ids(ids):
+            if not ids:
+                return "—"
+            return ", ".join(f"<code>{i}</code>" for i in ids)
+
+        report = (
+            "📣 <b>گزارش ارسال همگانی</b>\n"
+            "━━━━━━━━━━━━━━\n"
+            f"👥 کل کاربران: <b>{total}</b>\n"
+            f"✅ موفق: <b>{len(success)}</b>\n"
+            f"🚫 بلاک/حذف‌شده: <b>{len(blocked)}</b>\n"
+            f"❌ ناموفق: <b>{len(failed)}</b>\n"
+            "━━━━━━━━━━━━━━\n"
+            f"<b>موفق:</b> {fmt_ids(success)}\n"
+            f"<b>بلاک:</b> {fmt_ids(blocked)}\n"
+            f"<b>ناموفق:</b> {fmt_ids(failed)}\n\n"
+            f"{WATERMARK}"
+        )
+        try:
+            if status:
+                bot.edit_message_text(report, chat_id=status.chat.id,
+                                       message_id=status.message_id, parse_mode="HTML")
+            else:
+                safe_send(bot, admin_id, report, parse_mode="HTML")
+        except Exception:
+            safe_send(bot, admin_id, report, parse_mode="HTML")
+        logger.info("Broadcast by %s: total=%d ok=%d blocked=%d failed=%d",
+                    admin_id, total, len(success), len(blocked), len(failed))
+
+    return perform_broadcast
+
 # ---------------- panel flow ----------------
 
 def register(bot: TeleBot):
+    broadcast_step = make_broadcast_step(bot)
 
     @bot.message_handler(commands=['panel', 'admin'])
     def panel_command(message):
@@ -322,13 +388,6 @@ def register(bot: TeleBot):
             return
         safe_send(bot, message.chat.id, stats_text(), parse_mode="HTML")
 
-    @bot.message_handler(func=lambda m: m.text == B_CLOSE)
-    def kb_close(message):
-        if not is_message_valid(message) or not is_admin(message.from_user.id):
-            return
-        safe_send(bot, message.chat.id, "پنل بسته شد ✅ (برای بازکردن: /panel)",
-                  reply_markup=types.ReplyKeyboardRemove())
-
     @bot.message_handler(func=lambda m: m.text == B_BCAST)
     def kb_bcast(message):
         if not is_message_valid(message) or not is_admin(message.from_user.id):
@@ -340,7 +399,7 @@ def register(bot: TeleBot):
                   "برای لغو، «لغو» رو بفرست.",
                   parse_mode="HTML",
                   reply_markup=cancel_reply_keyboard())
-        bot.register_next_step_handler(message, perform_broadcast)
+        bot.register_next_step_handler(message, broadcast_step)
 
     @bot.message_handler(func=lambda m: m.text == B_FJ)
     def kb_fj(message):
@@ -483,7 +542,7 @@ def register(bot: TeleBot):
                 "برای لغو، دکمه‌ی لغو رو بزن.",
                 cancel_kb(),
             )
-            bot.register_next_step_handler(call.message, perform_broadcast)
+            bot.register_next_step_handler(call.message, broadcast_step)
 
         elif data == CB["fj_list"]:
             bot.answer_callback_query(call.id)
@@ -539,66 +598,7 @@ def register(bot: TeleBot):
         kb.add(types.InlineKeyboardButton(BTN["back"], callback_data=CB["menu"], style="success"))
         return kb
 
-    # -------- broadcast with full log --------
-    def perform_broadcast(message):
-        if not is_message_valid(message):
-            return
-        admin_id = message.chat.id
-        if not is_admin(message.from_user.id):
-            return
-        if message.text == BTN_CANCEL:
-            safe_send(bot, admin_id, "❌ ارسال همگانی لغو شد.",
-                      reply_markup=types.ReplyKeyboardRemove())
-            return
-
-        users = get_all_users()
-        total = len(users)
-        status = safe_send(bot, admin_id, "⏳ در حال ارسال همگانی...")
-
-        success, blocked, failed = [], [], []
-        for u in users:
-            uid = u["id"]
-            try:
-                bot.copy_message(uid, admin_id, message.message_id)
-                success.append(uid)
-            except apihelper.ApiTelegramException as e:
-                if "blocked" in str(e).lower() or "deactivated" in str(e).lower():
-                    blocked.append(uid)
-                else:
-                    failed.append(uid)
-                logger.warning("Broadcast failed to %s: %s", uid, e)
-            except Exception as e:
-                failed.append(uid)
-                logger.warning("Broadcast failed to %s: %s", uid, e)
-
-        def fmt_ids(ids):
-            if not ids:
-                return "—"
-            return ", ".join(f"<code>{i}</code>" for i in ids)
-
-        report = (
-            "📣 <b>گزارش ارسال همگانی</b>\n"
-            "━━━━━━━━━━━━━━\n"
-            f"👥 کل کاربران: <b>{total}</b>\n"
-            f"✅ موفق: <b>{len(success)}</b>\n"
-            f"🚫 بلاک/حذف‌شده: <b>{len(blocked)}</b>\n"
-            f"❌ ناموفق: <b>{len(failed)}</b>\n"
-            "━━━━━━━━━━━━━━\n"
-            f"<b>موفق:</b> {fmt_ids(success)}\n"
-            f"<b>بلاک:</b> {fmt_ids(blocked)}\n"
-            f"<b>ناموفق:</b> {fmt_ids(failed)}\n\n"
-            f"{WATERMARK}"
-        )
-        try:
-            if status:
-                bot.edit_message_text(report, chat_id=status.chat.id,
-                                      message_id=status.message_id, parse_mode="HTML")
-            else:
-                safe_send(bot, admin_id, report, parse_mode="HTML")
-        except Exception:
-            safe_send(bot, admin_id, report, parse_mode="HTML")
-        logger.info("Broadcast by %s: total=%d ok=%d blocked=%d failed=%d",
-                    admin_id, total, len(success), len(blocked), len(failed))
+    # -------- broadcast with full log (module-level fn, used by panel & old inline btn) --------
 
     # -------- add force-join chat --------
     def add_force_chat_step(message):

@@ -1,7 +1,7 @@
 """
 handlers/admin.py
-Full admin panel:
-- /panel: reply-keyboard driven dashboard (works without typing commands)
+Full admin panel — 100% reply-keyboard driven (no inline buttons here):
+- /panel: opens the admin keyboard
 - Stats: total users / today / this week / this month
 - Broadcast to all users with full success/failed report
 - Force-join management: list / add / remove channels & groups + on/off toggle
@@ -18,8 +18,7 @@ from telebot import apihelper
 import config
 from database import (count_users, visits_today, visits_this_week, visits_this_month,
                      get_all_users, get_force_channels, add_force_channel,
-                     remove_force_channel, get_force_channel_by_id)
-from .force_join import user_is_member
+                     remove_force_channel)
 from .messages import safe_send, esc, WATERMARK
 from .rate_limit import is_message_valid
 
@@ -29,45 +28,26 @@ TZ = timezone('Asia/Tehran')
 # extra admins file (besides ADMIN_USER_IDS from .env)
 EXTRA_ADMINS_PATH = Path(__file__).parent.parent / "admins.json"
 
-# ---- reply-keyboard button texts (admin panel) ----
+# ---- reply-keyboard button texts (the whole admin panel) ----
 B_STATS = "📊 آمار ربات"
 B_BCAST = "📢 ارسال همگانی"
 B_FJ = "🔒 جوین اجباری"
 B_ADMINS = "👥 مدیریت ادمین‌ها"
 
-# nested panels
+# force-join sub-panel
 B_FJ_LIST = "📋 لیست کانال‌ها"
 B_FJ_ADD = "➕ افزودن کانال/گروه"
 B_FJ_DEL = "🗑 حذف کانال/گروه"
 B_FJ_TOGGLE = "🔘 روشن/خاموش کردن"
-B_FJ_BACK = "🔙 بازگشت"
+B_FJ_BACK = "🔙 بازگشت به پنل"
 
+# admins sub-panel
 B_ADM_LIST = "📋 لیست ادمین‌ها"
 B_ADM_ADD = "➕ افزودن ادمین"
 B_ADM_DEL = "🗑 حذف ادمین"
-B_ADM_BACK = "🔙 بازگشت"
+B_ADM_BACK = "↩️ پنل اصلی"
 
 BTN_CANCEL = "لغو ❌"
-
-# callback data constants
-CB = {
-    "menu": "adm:menu",
-    "stats": "adm:stats",
-    "bcast": "adm:bcast",
-    "fj_list": "adm:fj_list",
-    "fj_add": "adm:fj_add",
-    "fj_del": "adm:fj_del:",
-    "cancel": "adm:cancel",
-    "check_fj": "adm:check_fj",
-}
-
-BTN = {
-    "stats": "📊 آمار ربات",
-    "bcast": "📢 ارسال همگانی",
-    "fj": "🔒 مدیریت جوین اجباری",
-    "back": "🔙 بازگشت",
-    "cancel": "❌ لغو",
-}
 
 # ---------------- persistent extra-admins ----------------
 
@@ -97,7 +77,7 @@ def is_admin(user_id: int) -> bool:
     """True if the user is an admin (from .env or added via panel)."""
     return user_id in config.ADMIN_USER_IDS or user_id in extra_admins
 
-# ---------------- keyboards ----------------
+# ---------------- keyboards (reply only) ----------------
 
 def admin_reply_keyboard() -> types.ReplyKeyboardMarkup:
     """Persistent reply keyboard shown to admins (the admin panel)."""
@@ -126,47 +106,6 @@ def admins_reply_keyboard() -> types.ReplyKeyboardMarkup:
 def cancel_reply_keyboard() -> types.ReplyKeyboardMarkup:
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
     kb.add(BTN_CANCEL)
-    return kb
-
-
-def admin_menu_kb() -> types.InlineKeyboardMarkup:
-    kb = types.InlineKeyboardMarkup(row_width=1)
-    kb.add(
-        types.InlineKeyboardButton(BTN["stats"], callback_data=CB["stats"], style="success"),
-        types.InlineKeyboardButton(BTN["bcast"], callback_data=CB["bcast"], style="success"),
-        types.InlineKeyboardButton(BTN["fj"], callback_data=CB["fj_list"], style="success"),
-    )
-    return kb
-
-
-def back_kb() -> types.InlineKeyboardMarkup:
-    kb = types.InlineKeyboardMarkup(row_width=1)
-    kb.add(types.InlineKeyboardButton(BTN["back"], callback_data=CB["menu"], style="success"))
-    return kb
-
-
-def cancel_kb() -> types.InlineKeyboardMarkup:
-    kb = types.InlineKeyboardMarkup(row_width=1)
-    kb.add(types.InlineKeyboardButton(BTN["cancel"], callback_data=CB["cancel"], style="success"))
-    return kb
-
-
-def force_channels_kb() -> types.InlineKeyboardMarkup:
-    channels = get_force_channels()
-    kb = types.InlineKeyboardMarkup(row_width=1)
-    state = "فعال ✅" if config.ENABLE_FORCE_JOIN else "خاموش ❌"
-    kb.add(types.InlineKeyboardButton(
-        f"🔘 وضعیت: {state} (برای تغییر بزن)",
-        callback_data=CB["check_fj"], style="success"))
-    kb.add(types.InlineKeyboardButton("➕ افزودن کانال/گروه", callback_data=CB["fj_add"],
-                                      style="success"))
-    if channels:
-        for ch in channels:
-            kb.add(types.InlineKeyboardButton(
-                f"🗑 حذف {ch['title'] or ch['chat_id']}",
-                callback_data=f"{CB['fj_del']}{ch['chat_id']}",
-                style="danger"))
-    kb.add(types.InlineKeyboardButton(BTN["back"], callback_data=CB["menu"], style="success"))
     return kb
 
 # ---------------- texts ----------------
@@ -229,16 +168,6 @@ def admins_menu_text() -> str:
 
 # ---------------- helpers ----------------
 
-def edit_or_send(bot: TeleBot, call, text: str, kb: types.InlineKeyboardMarkup):
-    """Edit the panel message if possible, otherwise send a new one."""
-    try:
-        bot.edit_message_text(text, chat_id=call.message.chat.id,
-                              message_id=call.message.message_id,
-                              parse_mode="HTML", reply_markup=kb)
-    except apihelper.ApiTelegramException:
-        safe_send(bot, call.message.chat.id, text, parse_mode="HTML", reply_markup=kb)
-
-
 def toggle_force_join() -> bool:
     """Flip ENABLE_FORCE_JOIN at runtime and persist it into .env."""
     config.ENABLE_FORCE_JOIN = not config.ENABLE_FORCE_JOIN
@@ -261,7 +190,7 @@ def toggle_force_join() -> bool:
 def resolve_chat(bot: TeleBot, raw: str):
     """
     Resolve a chat from: @username | t.me/... link | invite link (t.me/+...) | numeric id.
-    Returns (chat, link) or (None, error_message).
+    Returns (chat, None) or (None, error_message).
     """
     raw = (raw or "").strip()
     if not raw:
@@ -371,6 +300,10 @@ def make_broadcast_step(bot: TeleBot):
 def register(bot: TeleBot):
     broadcast_step = make_broadcast_step(bot)
 
+    def admin_guard(message) -> bool:
+        """Common guard: valid message + admin; silently ignore otherwise."""
+        return is_message_valid(message) and is_admin(message.from_user.id)
+
     @bot.message_handler(commands=['panel', 'admin'])
     def panel_command(message):
         if not is_message_valid(message):
@@ -381,16 +314,16 @@ def register(bot: TeleBot):
         safe_send(bot, message.chat.id, menu_text(), parse_mode="HTML",
                   reply_markup=admin_reply_keyboard())
 
-    # -------- reply-keyboard buttons (main admin flow) --------
+    # -------- main panel buttons --------
     @bot.message_handler(func=lambda m: m.text == B_STATS)
     def kb_stats(message):
-        if not is_message_valid(message) or not is_admin(message.from_user.id):
+        if not admin_guard(message):
             return
         safe_send(bot, message.chat.id, stats_text(), parse_mode="HTML")
 
     @bot.message_handler(func=lambda m: m.text == B_BCAST)
     def kb_bcast(message):
-        if not is_message_valid(message) or not is_admin(message.from_user.id):
+        if not admin_guard(message):
             return
         safe_send(bot, message.chat.id,
                   "📢 <b>ارسال همگانی</b>\n\n"
@@ -403,28 +336,28 @@ def register(bot: TeleBot):
 
     @bot.message_handler(func=lambda m: m.text == B_FJ)
     def kb_fj(message):
-        if not is_message_valid(message) or not is_admin(message.from_user.id):
+        if not admin_guard(message):
             return
         safe_send(bot, message.chat.id, fj_menu_text(), parse_mode="HTML",
                   reply_markup=fj_reply_keyboard())
 
     @bot.message_handler(func=lambda m: m.text == B_ADMINS)
     def kb_admins(message):
-        if not is_message_valid(message) or not is_admin(message.from_user.id):
+        if not admin_guard(message):
             return
         safe_send(bot, message.chat.id, admins_menu_text(), parse_mode="HTML",
                   reply_markup=admins_reply_keyboard())
 
-    # ---- force-join sub-panel ----
+    # -------- force-join sub-panel --------
     @bot.message_handler(func=lambda m: m.text == B_FJ_LIST)
     def kb_fj_list(message):
-        if not is_message_valid(message) or not is_admin(message.from_user.id):
+        if not admin_guard(message):
             return
         safe_send(bot, message.chat.id, fj_menu_text(), parse_mode="HTML")
 
     @bot.message_handler(func=lambda m: m.text == B_FJ_ADD)
     def kb_fj_add(message):
-        if not is_message_valid(message) or not is_admin(message.from_user.id):
+        if not admin_guard(message):
             return
         safe_send(bot, message.chat.id,
                   "➕ <b>افزودن کانال/گروه</b>\n\n"
@@ -432,7 +365,8 @@ def register(bot: TeleBot):
                   "▪️ یوزرنیم مثل <code>@mychannel</code>\n"
                   "▪️ لینک مثل <code>t.me/mychannel</code>\n"
                   "▪️ لینک خصوصی دعوت <code>t.me/+xxxx</code>\n"
-                  "▪️ آیدی عددی مثل <code>-1001234567</code>\n\n"
+                  "▪️ آیدی عددی مثل <code>-1001234567</code>\n"
+                  "▪️ یا یه پیام از خود کانال رو فوروارد کن\n\n"
                   "⚠️ ربات باید <b>ادمین</b> اون چت باشه.",
                   parse_mode="HTML",
                   reply_markup=cancel_reply_keyboard())
@@ -440,50 +374,49 @@ def register(bot: TeleBot):
 
     @bot.message_handler(func=lambda m: m.text == B_FJ_DEL)
     def kb_fj_del(message):
-        if not is_message_valid(message) or not is_admin(message.from_user.id):
+        if not admin_guard(message):
             return
         channels = get_force_channels()
         if not channels:
-            safe_send(bot, message.chat.id, "لیست جوین اجباری خالیه! چیزی برای حذف نیست.")
+            safe_send(bot, message.chat.id, "لیست جوین اجباری خالیه! چیزی برای حذف نیست.",
+                      parse_mode="HTML")
             return
-        kb = types.InlineKeyboardMarkup(row_width=1)
-        for ch in channels:
-            kb.add(types.InlineKeyboardButton(
-                f"🗑 {ch['title'] or ch['chat_id']}",
-                callback_data=f"{CB['fj_del']}{ch['chat_id']}", style="danger"))
-        safe_send(bot, message.chat.id, "کدوم یکی رو حذف کنم؟ 👇",
-                  parse_mode="HTML", reply_markup=kb)
+        lines = ["🗑 <b>کدوم یکی رو حذف کنم؟</b>\n"]
+        for i, ch in enumerate(channels, 1):
+            lines.append(f"{i}. {esc(ch['title'] or ch['chat_id'])} — <code>{ch['chat_id']}</code>")
+        lines.append("\nشماره‌ش رو بنویس (یا «لغو»):")
+        safe_send(bot, message.chat.id, "\n".join(lines), parse_mode="HTML",
+                  reply_markup=cancel_reply_keyboard())
+        bot.register_next_step_handler(message, remove_force_chat_step)
 
     @bot.message_handler(func=lambda m: m.text == B_FJ_TOGGLE)
     def kb_fj_toggle(message):
-        if not is_message_valid(message) or not is_admin(message.from_user.id):
+        if not admin_guard(message):
             return
         new_state = toggle_force_join()
         state_txt = "✅ فعال شد" if new_state else "❌ خاموش شد"
         safe_send(bot, message.chat.id,
-                  f"🔘 جوین اجباری {state_txt}",
-                  parse_mode="HTML")
-        # re-show current fj menu
-        safe_send(bot, message.chat.id, fj_menu_text(), parse_mode="HTML",
+                  f"🔘 جوین اجباری {state_txt}\n\n{fj_menu_text()}",
+                  parse_mode="HTML",
                   reply_markup=fj_reply_keyboard())
 
     @bot.message_handler(func=lambda m: m.text == B_FJ_BACK)
     def kb_fj_back(message):
-        if not is_message_valid(message) or not is_admin(message.from_user.id):
+        if not admin_guard(message):
             return
         safe_send(bot, message.chat.id, menu_text(), parse_mode="HTML",
                   reply_markup=admin_reply_keyboard())
 
-    # ---- admins sub-panel ----
+    # -------- admins sub-panel --------
     @bot.message_handler(func=lambda m: m.text == B_ADM_LIST)
     def kb_adm_list(message):
-        if not is_message_valid(message) or not is_admin(message.from_user.id):
+        if not admin_guard(message):
             return
         safe_send(bot, message.chat.id, admins_menu_text(), parse_mode="HTML")
 
     @bot.message_handler(func=lambda m: m.text == B_ADM_ADD)
     def kb_adm_add(message):
-        if not is_message_valid(message) or not is_admin(message.from_user.id):
+        if not admin_guard(message):
             return
         safe_send(bot, message.chat.id,
                   "➕ <b>افزودن ادمین</b>\n\n"
@@ -495,121 +428,87 @@ def register(bot: TeleBot):
 
     @bot.message_handler(func=lambda m: m.text == B_ADM_DEL)
     def kb_adm_del(message):
-        if not is_message_valid(message) or not is_admin(message.from_user.id):
+        if not admin_guard(message):
             return
         if not extra_admins:
             safe_send(bot, message.chat.id,
                       "ادمین اضافه‌ای برای حذف نیست! ادمین‌های اصلی فقط از .env قابل حذفن.",
                       parse_mode="HTML")
             return
-        kb = types.InlineKeyboardMarkup(row_width=1)
-        for a in sorted(extra_admins):
-            kb.add(types.InlineKeyboardButton(f"🗑 حذف {a}",
-                                              callback_data=f"adm:adm_del:{a}",
-                                              style="danger"))
-        safe_send(bot, message.chat.id, "کدوم ادمین رو حذف کنم؟ 👇", reply_markup=kb)
+        lines = ["🗑 <b>کدوم ادمین رو حذف کنم؟</b>\n"]
+        for i, a in enumerate(sorted(extra_admins), 1):
+            lines.append(f"{i}. <code>{a}</code>")
+        lines.append("\nشماره‌ش رو بنویس (یا «لغو»):")
+        safe_send(bot, message.chat.id, "\n".join(lines), parse_mode="HTML",
+                  reply_markup=cancel_reply_keyboard())
+        bot.register_next_step_handler(message, remove_admin_step)
 
     @bot.message_handler(func=lambda m: m.text == B_ADM_BACK)
     def kb_adm_back(message):
-        if not is_message_valid(message) or not is_admin(message.from_user.id):
+        if not admin_guard(message):
             return
         safe_send(bot, message.chat.id, menu_text(), parse_mode="HTML",
                   reply_markup=admin_reply_keyboard())
 
-    # -------- callback router (admin panel only) --------
-    @bot.callback_query_handler(func=lambda c: c.data.startswith("adm:"))
-    def admin_callback(call):
-        if not is_admin(call.from_user.id):
-            bot.answer_callback_query(call.id, "فقط برای ادمین! 🚫", show_alert=True)
+    # -------- next-step handlers (text driven, no inline buttons) --------
+
+    def remove_force_chat_step(message):
+        if not admin_guard(message):
             return
-        data = call.data
-
-        if data == CB["menu"]:
-            bot.answer_callback_query(call.id)
-            edit_or_send(bot, call, menu_text(), admin_menu_kb())
-
-        elif data == CB["stats"]:
-            bot.answer_callback_query(call.id, "در حال محاسبه...")
-            edit_or_send(bot, call, stats_text(), back_kb())
-
-        elif data == CB["bcast"]:
-            bot.answer_callback_query(call.id)
-            edit_or_send(
-                bot, call,
-                "📢 <b>ارسال همگانی</b>\n\n"
-                "پیام موردنظر رو بفرست (متن، عکس، ویدیو، هر چیزی)؛\n"
-                "همون برای همه کاربران ارسال می‌شه.\n\n"
-                "برای لغو، دکمه‌ی لغو رو بزن.",
-                cancel_kb(),
-            )
-            bot.register_next_step_handler(call.message, broadcast_step)
-
-        elif data == CB["fj_list"]:
-            bot.answer_callback_query(call.id)
-            edit_or_send(bot, call, fj_menu_text(), force_channels_kb())
-
-        elif data == CB["fj_add"]:
-            bot.answer_callback_query(call.id)
-            edit_or_send(
-                bot, call,
-                "➕ <b>افزودن کانال/گروه</b>\n\n"
-                "یکی از این‌ها رو بفرست:\n"
-                "▪️ یوزرنیم مثل <code>@mychannel</code>\n"
-                "▪️ لینک مثل <code>t.me/mychannel</code>\n"
-                "▪️ لینک خصوصی دعوت <code>t.me/+xxxx</code>\n\n"
-                "⚠️ ربات باید <b>ادمین</b> اون چت باشه.",
-                cancel_kb(),
-            )
-            bot.register_next_step_handler(call.message, add_force_chat_step)
-
-        elif data == CB["check_fj"]:
-            new_state = toggle_force_join()
-            bot.answer_callback_query(call.id, "تغییر کرد ✅")
-            edit_or_send(bot, call, fj_menu_text(), force_channels_kb())
-
-        elif data.startswith(CB["fj_del"]):
-            chat_id = int(data[len(CB["fj_del"]):])
-            removed = remove_force_channel(chat_id)
-            bot.answer_callback_query(
-                call.id, "حذف شد ✅" if removed else "قبلاً حذف شده بود!")
-            edit_or_send(bot, call, fj_menu_text(), force_channels_kb())
-
-        elif data.startswith("adm:adm_del:"):
-            admin_id = int(data.split("adm:adm_del:", 1)[1])
-            if admin_id in extra_admins:
-                extra_admins.discard(admin_id)
-                save_extra_admins(extra_admins)
-                bot.answer_callback_query(call.id, "ادمین حذف شد ✅")
-            else:
-                bot.answer_callback_query(call.id, "این ادمین قابل حذف نیست!")
-            edit_or_send(bot, call, admins_menu_text(),
-                         back_kb() if not extra_admins else _admins_del_kb())
-
-        elif data == CB["cancel"]:
-            bot.answer_callback_query(call.id, "لغو شد")
-            edit_or_send(bot, call, "❌ عملیات لغو شد.", admin_menu_kb())
-
-    def _admins_del_kb():
-        kb = types.InlineKeyboardMarkup(row_width=1)
-        for a in sorted(extra_admins):
-            kb.add(types.InlineKeyboardButton(f"🗑 حذف {a}",
-                                              callback_data=f"adm:adm_del:{a}",
-                                              style="danger"))
-        kb.add(types.InlineKeyboardButton(BTN["back"], callback_data=CB["menu"], style="success"))
-        return kb
-
-    # -------- broadcast with full log (module-level fn, used by panel & old inline btn) --------
-
-    # -------- add force-join chat --------
-    def add_force_chat_step(message):
-        if not is_message_valid(message):
+        channels = get_force_channels()
+        if message.text == BTN_CANCEL:
+            safe_send(bot, message.chat.id, "❌ حذف لغو شد.", parse_mode="HTML",
+                      reply_markup=fj_reply_keyboard())
             return
-        admin_id = message.chat.id
-        if not is_admin(message.from_user.id):
+        if not (message.text or "").strip().isdigit():
+            safe_send(bot, message.chat.id, "⚠️ فقط شماره رو بفرست!", parse_mode="HTML",
+                      reply_markup=fj_reply_keyboard())
+            return
+        idx = int(message.text.strip())
+        if not (1 <= idx <= len(channels)):
+            safe_send(bot, message.chat.id, "⚠️ شماره معتبر نیست!", parse_mode="HTML",
+                      reply_markup=fj_reply_keyboard())
+            return
+        ch = channels[idx - 1]
+        remove_force_channel(ch["chat_id"])
+        safe_send(bot, message.chat.id,
+                  f"✅ «{esc(ch['title'] or ch['chat_id'])}» حذف شد.\n\n{fj_menu_text()}",
+                  parse_mode="HTML",
+                  reply_markup=fj_reply_keyboard())
+
+    def remove_admin_step(message):
+        if not admin_guard(message):
             return
         if message.text == BTN_CANCEL:
-            safe_send(bot, admin_id, "❌ افزودن لغو شد.",
-                      reply_markup=types.ReplyKeyboardRemove())
+            safe_send(bot, message.chat.id, "❌ حذف لغو شد.", parse_mode="HTML",
+                      reply_markup=admins_reply_keyboard())
+            return
+        if not (message.text or "").strip().isdigit():
+            safe_send(bot, message.chat.id, "⚠️ فقط شماره رو بفرست!", parse_mode="HTML",
+                      reply_markup=admins_reply_keyboard())
+            return
+        ordered = sorted(extra_admins)
+        idx = int(message.text.strip())
+        if not (1 <= idx <= len(ordered)):
+            safe_send(bot, message.chat.id, "⚠️ شماره معتبر نیست!", parse_mode="HTML",
+                      reply_markup=admins_reply_keyboard())
+            return
+        target = ordered[idx - 1]
+        extra_admins.discard(target)
+        save_extra_admins(extra_admins)
+        safe_send(bot, message.chat.id,
+                  f"✅ <code>{target}</code> از ادمین‌ها حذف شد.\n\n{admins_menu_text()}",
+                  parse_mode="HTML",
+                  reply_markup=admins_reply_keyboard())
+        logger.info("Admin %s removed admin %s", message.from_user.id, target)
+
+    def add_force_chat_step(message):
+        if not admin_guard(message):
+            return
+        admin_id = message.chat.id
+        if message.text == BTN_CANCEL:
+            safe_send(bot, admin_id, "❌ افزودن لغو شد.", parse_mode="HTML",
+                      reply_markup=fj_reply_keyboard())
             return
         if message.text and message.text.startswith("/"):
             safe_send(bot, admin_id, "❌ افزودن لغو شد.")
@@ -624,17 +523,17 @@ def register(bot: TeleBot):
             if getattr(origin, "type", None) == "chat":
                 target = origin.sender_chat
         if target is not None:
-            _save_force_chat(bot, admin_id, target, None)
+            _save_force_chat(bot, admin_id, target)
             return
 
         chat, err = resolve_chat(bot, message.text or "")
         if chat is None:
             safe_send(bot, admin_id, f"⚠️ {err}", parse_mode="HTML",
-                      reply_markup=force_channels_kb())
+                      reply_markup=fj_reply_keyboard())
             return
-        _save_force_chat(bot, admin_id, chat, None)
+        _save_force_chat(bot, admin_id, chat)
 
-    def _save_force_chat(bot, admin_id, chat, _):
+    def _save_force_chat(bot, admin_id, chat):
         # verify the bot can actually check membership there (must be admin)
         try:
             me = bot.get_chat_member(chat.id, bot.get_me().id)
@@ -642,13 +541,13 @@ def register(bot: TeleBot):
                 safe_send(bot, admin_id,
                           f"⚠️ من <b>ادمین</b> «{esc(chat.title) or chat.id}» نیستم!\n"
                           "اول من رو ادمین کن بعد اضافه‌م کن.",
-                          parse_mode="HTML", reply_markup=force_channels_kb())
+                          parse_mode="HTML", reply_markup=fj_reply_keyboard())
                 return
         except Exception as e:
             logger.warning("admin check failed for %s: %s", chat.id, e)
             safe_send(bot, admin_id,
                       "⚠️ نمی‌تونم وضعیت خودم رو اونجا چک کنم؛ مطمئن شو ادمین هستم.",
-                      reply_markup=force_channels_kb())
+                      parse_mode="HTML", reply_markup=fj_reply_keyboard())
             return
 
         ctype = "channel" if getattr(chat, "type", "") == "channel" else "group"
@@ -658,23 +557,20 @@ def register(bot: TeleBot):
         if add_force_channel(chat.id, chat.title, link, ctype):
             safe_send(bot, admin_id,
                       f"✅ <b>{esc(chat.title) or chat.id}</b> به جوین اجباری اضافه شد!\n"
-                      f"🆔 <code>{chat.id}</code>",
-                      parse_mode="HTML", reply_markup=force_channels_kb())
+                      f"🆔 <code>{chat.id}</code>\n\n{fj_menu_text()}",
+                      parse_mode="HTML", reply_markup=fj_reply_keyboard())
         else:
             safe_send(bot, admin_id,
-                      f"ℹ️ «{esc(chat.title) or chat.id}» از قبل توی لیست بود.",
-                      parse_mode="HTML", reply_markup=force_channels_kb())
+                      f"ℹ️ «{esc(chat.title) or chat.id}» از قبل توی لیست بود.\n\n{fj_menu_text()}",
+                      parse_mode="HTML", reply_markup=fj_reply_keyboard())
 
-    # -------- add admin --------
     def add_admin_step(message):
-        if not is_message_valid(message):
+        if not admin_guard(message):
             return
         admin_id = message.chat.id
-        if not is_admin(message.from_user.id):
-            return
         if message.text == BTN_CANCEL:
-            safe_send(bot, admin_id, "❌ افزودن ادمین لغو شد.",
-                      reply_markup=types.ReplyKeyboardRemove())
+            safe_send(bot, admin_id, "❌ افزودن ادمین لغو شد.", parse_mode="HTML",
+                      reply_markup=admins_reply_keyboard())
             return
 
         # accept: numeric id text, or a forwarded message from the user
@@ -696,7 +592,7 @@ def register(bot: TeleBot):
 
         if new_admin == message.from_user.id:
             safe_send(bot, admin_id, "😅 خودت که از قبل ادمینی!",
-                      reply_markup=admins_reply_keyboard())
+                      parse_mode="HTML", reply_markup=admins_reply_keyboard())
             return
 
         if is_admin(new_admin):
@@ -709,6 +605,7 @@ def register(bot: TeleBot):
         save_extra_admins(extra_admins)
         safe_send(bot, admin_id,
                   f"✅ <code>{new_admin}</code> ادمین شد!\n"
-                  "این کاربر از جوین اجباری هم معافه 👑",
+                  "این کاربر از جوین اجباری هم معافه 👑\n\n"
+                  f"{admins_menu_text()}",
                   parse_mode="HTML", reply_markup=admins_reply_keyboard())
         logger.info("Admin %s added new admin %s", admin_id, new_admin)

@@ -9,7 +9,7 @@ from database import add_user, count_users
 from .rate_limit import check_rate_limit, is_message_valid
 from .force_join import check as force_join_check
 from .messages import (safe_send, esc, main_keyboard, copy_id_keyboard, HELP_TEXT, ABOUT_TEXT,
-                       BTN_BROADCAST, BTN_CANCEL, WATERMARK)
+                       BTN_CANCEL, WATERMARK)
 from .admin import admin_reply_keyboard, is_admin
 
 logger = logging.getLogger(__name__)

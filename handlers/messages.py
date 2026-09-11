@@ -1,6 +1,6 @@
 """
 handlers/messages.py
-Non-command message handlers (forwarded messages, broadcast flow) and message texts.
+Non-command message handlers (forwarded messages) and message texts.
 """
 from telebot import TeleBot, apihelper
 from telebot import types
@@ -19,7 +19,6 @@ WATERMARK = "└── <b>RezDigitIDBot</b> 💎"
 BTN_HELP = "راهنمای کامل 📖"
 BTN_ID = "آیدی خودم 🆔"
 BTN_ABOUT = "درباره ربات ℹ️"
-BTN_BROADCAST = "پیام همگانی 📢"
 BTN_CANCEL = "لغو ❌"
 BTN_COPY_ID = "کپی آیدی 📋"
 
@@ -161,8 +160,6 @@ def register(bot: TeleBot):
     Register handlers for non-command messages (forwarded messages)
     and callback queries for inline buttons.
     """
-    from .admin import make_broadcast_step, is_admin
-    broadcast_step = make_broadcast_step(bot)
 
     # ---------- callback queries (inline buttons) ----------
     @bot.callback_query_handler(func=lambda c: True)
@@ -170,9 +167,8 @@ def register(bot: TeleBot):
         try:
             user_id = call.from_user.id
 
-            # force-join re-check on every button press (except the join-check itself
-            # and admin panel buttons which are already admin-gated)
-            if call.data not in ("check_join",) and not call.data.startswith("adm:"):
+            # force-join re-check on every button press (except the join-check itself)
+            if call.data not in ("check_join",):
                 if not force_join_check(bot, call):
                     return
 
@@ -221,17 +217,6 @@ def register(bot: TeleBot):
             elif data == "about":
                 bot.answer_callback_query(call.id)
                 safe_send(bot, call.message.chat.id, ABOUT_TEXT, parse_mode="HTML")
-
-            elif data == "broadcast":
-                if not is_admin(user_id):
-                    bot.answer_callback_query(call.id, "این دکمه فقط برای ادمینه! 🚫", show_alert=True)
-                    return
-                bot.answer_callback_query(call.id, "حالا پیامت رو بفرست")
-                safe_send(bot, call.message.chat.id,
-                          "📢 حالا پیام همگانی رو بفرست (هر نوع پیامی)؛ با دکمه‌ی لغو می‌تونی منصرف شی.",
-                          reply_markup=types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-                          .add(types.KeyboardButton(BTN_CANCEL)))
-                bot.register_next_step_handler(call.message, broadcast_step)
 
         except apihelper.ApiTelegramException as e:
             logger.warning("Callback API error: %s", e)
